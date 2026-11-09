@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<iso_project image_name="vn.bin" cue_sheet="vn.cue">
+	<track type="data">
+		<identifiers
+			system      = "PLAYSTATION"
+			application = "PLAYSTATION"
+			volume      = "VNDEMO"
+			publisher   = "SONY"
+			copyright   = ""
+		/>
+		<!-- <license file="${PROJECT_SOURCE_DIR}/licensea.dat" /> -->
+		<directory_tree>
+			<file name="SYSTEM.CNF" type="data"
+			      source="${PROJECT_SOURCE_DIR}/system.cnf" />
+			<file name="MAIN.EXE"   type="data"
+			      source="vnengine.exe" />
+			<dir name="DATA">
+				<!-- AUTO-DATA-BEGIN: список генерируется build_data.py.
+				     Руками не править — правки затрутся. -->
+				<file name="ART.PAK" type="data" source="${PROJECT_SOURCE_DIR}/data/ART.PAK" />
+				<dir name="SCR">
+					<file name="CH00.VNS" type="data" source="${PROJECT_SOURCE_DIR}/data/SCR/CH00.VNS" />
+					<file name="CH01.VNS" type="data" source="${PROJECT_SOURCE_DIR}/data/SCR/CH01.VNS" />
+					<file name="CH02.VNS" type="data" source="${PROJECT_SOURCE_DIR}/data/SCR/CH02.VNS" />
+					<file name="CHAPS.BIN" type="data" source="${PROJECT_SOURCE_DIR}/data/SCR/CHAPS.BIN" />
+					<file name="GAL.BIN" type="data" source="${PROJECT_SOURCE_DIR}/data/SCR/GAL.BIN" />
+				</dir>
+				<dir name="BGM">
+					<file name="BANK.VAB" type="data" source="${PROJECT_SOURCE_DIR}/data/BGM/BANK.VAB" />
+					<file name="M000.SEQ" type="data" source="${PROJECT_SOURCE_DIR}/data/BGM/M000.SEQ" />
+				</dir>
+				<dir name="SYS">
+					<file name="FONT.TIM" type="data" source="${PROJECT_SOURCE_DIR}/data/SYS/FONT.TIM" />
+					<file name="FONT.WID" type="data" source="${PROJECT_SOURCE_DIR}/data/SYS/FONT.WID" />
+					<file name="NAMES.DBG" type="data" source="${PROJECT_SOURCE_DIR}/data/SYS/NAMES.DBG" />
+					<file name="SAVEHDR.BIN" type="data" source="${PROJECT_SOURCE_DIR}/data/SYS/SAVEHDR.BIN" />
+				</dir>
+				<!-- AUTO-DATA-END -->
+			</dir>
+			<dummy sectors="1024" />
+		</directory_tree>
+	</track>
+</iso_project>

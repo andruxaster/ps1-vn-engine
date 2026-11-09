@@ -1,0 +1,20 @@
+# сборка
+build/
+data/
+*.bin
+*.cue
+
+# лицензионный блок Sony — не распространяется
+licensea.dat
+licensee.dat
+licensej.dat
+
+# промежуточный результат импорта из Ren'Py
+script/imported.vns
+
+# python
+__pycache__/
+*.pyc
+
+# видео и озвучка конкретной игры обычно тяжёлые
+video/*.str

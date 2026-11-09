@@ -1,0 +1,2 @@
+# имя   файл              tick_hz  loop
+theme   music/theme.mid   240      loop
