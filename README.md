@@ -43,7 +43,8 @@
 
 ## Быстрый старт
 
-Нужны [PSn00bSDK](https://github.com/Lameguy64/PSn00bSDK), Python 3 с
+Нужны [PSn00bSDK](https://github.com/Lameguy64/PSn00bSDK) (проверено на
+готовом релизе 0.24 для Linux: GCC 12.3.0, mkpsxiso 2.03), Python 3 с
 Pillow и шрифт DejaVu Sans (`fonts-dejavu-core`).
 
 ```bash
@@ -70,6 +71,13 @@ cmake --build build
 этого репозитория.
 
 Авторы и лицензии ассетов — в [CREDITS.md](CREDITS.md).
+
+## Лицензия
+
+Движок, инструменты и документация — [MIT](LICENSE): используйте,
+меняйте и распространяйте как угодно, в том числе в коммерческих играх.
+Ассеты демо-игры тоже под MIT, их авторы перечислены в
+[CREDITS.md](CREDITS.md).
 
 ## Документация
 

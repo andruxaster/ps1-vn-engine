@@ -11,7 +11,21 @@
 | psxavenc | только для видео и озвучки | [github.com/WonderfulToolchain/psxavenc](https://github.com/WonderfulToolchain/psxavenc) |
 | ffmpeg | подготовка видео | пакеты дистрибутива |
 
-Проект проверялся с GCC 12.3.0 и `mkpsxiso` 2.03 из поставки PSn00bSDK.
+Проект собирается готовым релизом PSn00bSDK 0.24 для Linux
+(`PSn00bSDK-0.24-Linux.zip` со страницы релизов): в нём уже есть
+компилятор `mipsel-none-elf-gcc` 12.3.0, `mkpsxiso` 2.03 и Ninja. Достаточно
+распаковать его и указать путь:
+
+```bash
+export PATH=/opt/PSn00bSDK-0.24-Linux/bin:$PATH
+export PSN00BSDK_LIBS=/opt/PSn00bSDK-0.24-Linux/lib/libpsn00b
+./build.sh            # или ./build.sh release
+```
+
+Сборка проходит без единого предупреждения компилятора в обоих режимах.
+Предупреждения `mkpsxiso` вида «'source' attribute for subdirectory ... is
+invalid or empty» безобидны: у каталогов образа нет своего источника, пути
+заданы у файлов.
 
 Свой шрифт вместо DejaVu задаётся переменной окружения:
 

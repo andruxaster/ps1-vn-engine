@@ -324,18 +324,23 @@ static void menu_draw(void)
    1024 имени стоят 24 КБ памяти, дальше номера показываются как есть. */
 #define DBG_NAMES_MAX 1024
 #define DBG_NAME_LEN  24
-static int    dbg_on;
-static u_char dbg_names[DBG_NAMES_MAX * DBG_NAME_LEN];
-static int    dbg_have_names;
 static int    dbg_bg_id = -1;
 static int    dbg_ch_id[CHAR_SLOTS];
 static int    dbg_scene_id = -1;
+
+#if !VN_RELEASE
+/* В релизе оверлея нет, а значит не нужны ни таблица имён (24 КБ памяти),
+   ни её чтение с диска при старте. */
+static int    dbg_on;
+static u_char dbg_names[DBG_NAMES_MAX * DBG_NAME_LEN];
+static int    dbg_have_names;
 
 static const char *dbg_name(int id)
 {
     if (!dbg_have_names || id < 0 || id >= DBG_NAMES_MAX) return "?";
     return (const char *)(dbg_names + id * DBG_NAME_LEN);
 }
+#endif
 
 /* --- сплэш-экран (юр. текст, титры) --- */
 static const char *splash_text;
@@ -487,8 +492,10 @@ int vm_start(u_char *buf, int cap)
         return -1;
 
     /* Таблица имён нужна только оверлею: нет файла — покажем номера. */
+#if !VN_RELEASE
     dbg_have_names = cd_load_to("\\DATA\\SYS\\NAMES.DBG;1", dbg_names,
                                 sizeof(dbg_names), NULL) ? 1 : 0;
+#endif
     for (i = 0; i < CHAR_SLOTS; i++) dbg_ch_id[i] = -1;
 
     pc = 0;
