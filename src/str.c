@@ -82,6 +82,17 @@ static volatile int ring_overrun;
 static uint32_t first_bad_magic;
 static int      bad_sectors;
 static int      timed_out;
+/* Секторы с законной сигнатурой, но номером кадра меньше уже показанного.
+   На железе с ODE именно такой сектор раньше обрывал ролик после первого
+   кадра: проверка «номер пошёл назад — начался следующий файл» срабатывала
+   на нём сразу. Теперь он только считается, а номер запоминается. */
+static int      back_sectors;
+static uint32_t first_back_id;
+/* Подряд идущие чужие секторы. Конец ролика — когда их набралось много,
+   а не первый же: одиночный сбой не должен обрывать видео. */
+static int      foreign_run;
+static int      foreign_end;
+#define STR_FOREIGN_END 24
 
 static int frame_no;
 static int last_frame_id;      /* для распознавания начала следующего файла */
@@ -202,6 +213,10 @@ static void start_stream(CdlFILE *file)
     first_bad_magic = 0;
     bad_sectors = 0;
     timed_out = 0;
+    back_sectors = 0;
+    first_back_id = 0;
+    foreign_run = 0;
+    foreign_end = 0;
     dropped_frames = 0;
     parse_pos = 0;
     asm_active = 0;
@@ -298,28 +313,29 @@ static int stream_next_frame(void)
         memcpy(&h, sector_copy, sizeof(h));
         is_mdec = (h.magic == 0x0160 && h.type == 0x8001);
 
-        if (!is_mdec) {
-            bad_sectors++;
-            if (!first_bad_magic)
-                first_bad_magic = ((uint32_t)h.magic << 16) | h.type;
-            /* After the last frame, the next file/sector will normally not
-               have STR magic. That is our end-of-stream marker. If we are
-               midway through a frame, treat it as a broken stream instead. */
-            if (asm_active) {
+        /* Чужой сектор: не видео, либо видео с номером кадра меньше уже
+           показанного (так выглядит начало СЛЕДУЮЩЕГО ролика на диске —
+           файлы лежат вплотную). Основной признак конца — счётчик кадров
+           от компилятора в str_play(); здесь — запасной, по длинной серии
+           чужих секторов подряд. */
+        if (!is_mdec || (int) h.frame_id < last_frame_id) {
+            if (!is_mdec) {
+                bad_sectors++;
+                if (!first_bad_magic)
+                    first_bad_magic = ((uint32_t)h.magic << 16) | h.type;
+            } else {
+                back_sectors++;
+                if (!first_back_id)
+                    first_back_id = (h.frame_id << 8) | (h.sector_id & 0xFF);
+            }
+            if (++foreign_run >= STR_FOREIGN_END) {
                 asm_active = 0;
+                foreign_end = 1;
                 return -1;
             }
-            return -1;
+            continue;
         }
-
-        /* Ролики лежат на диске вплотную, и после последнего кадра привод
-           сразу попадает в секторы СЛЕДУЮЩЕГО файла: сигнатура там законная,
-           тип верный, и по ней конец не определить. Отличает их номер кадра —
-           он начинается заново, то есть перестаёт расти. */
-        if ((int) h.frame_id < last_frame_id) {
-            asm_active = 0;
-            return -1;
-        }
+        foreign_run = 0;
 
         if (!asm_active) {
             if (!frame_start(&h))
@@ -513,13 +529,14 @@ int str_play(const char *path, int nframes, int ticks, int skippable)
        дошли ли секторы от привода (cb), были ли среди них видеосекторы
        (f) и что за данные пришли вместо них (bad/magic). */
     sprintf(str_report,
-            "f%d drop%d dec%d over%d %s\n"
-            "cb%d bad%d m%08lx cd%d oth%d",
-            shown, dropped_frames, decode_errors, ring_overrun,
+            "f%d/%d drop%d dec%d ov%d %s\n"
+            "cb%d bad%d m%08lx bk%d %lx",
+            shown, nframes, dropped_frames, decode_errors, ring_overrun,
             skipped ? "skip" : timed_out ? "TIMEOUT"
-                    : (cd_error ? "CDERR" : "end"),
+                    : cd_error ? "CDERR" : foreign_end ? "eof"
+                    : (nframes > 0 && shown >= nframes) ? "end" : "stop",
             cd_callbacks, bad_sectors, (unsigned long)first_bad_magic,
-            cd_error, cd_other);
+            back_sectors, (unsigned long)first_back_id);
     LOG("str: %s\n", str_report);
 
     gfx_restore_display();
