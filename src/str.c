@@ -38,7 +38,11 @@
 #define STR_RING_SECTORS    128       /* 256 KiB of CD user data */
 #define STR_BS_WORDS        0x8000    /* 128 KiB */
 #define STR_MDEC_WORDS      0x8000    /* 128 KiB */
-#define STR_SPIN_LIMIT      18000000
+/* Сколько кадров развёртки ждать очередной кадр ролика, прежде чем
+   признать поток мёртвым. Раньше предел считался в оборотах цикла, а их
+   скорость зависит от приставки — на железе это выходило за полминуты
+   чёрного экрана. */
+#define STR_WAIT_VBLANKS    300
 #define STR_PAD_EVERY       8192
 
 /* STR header in the 2048-byte CD user-data area. */
@@ -73,6 +77,11 @@ static volatile int cd_error;
 static volatile int cd_other;
 static volatile int cd_callbacks;
 static volatile int ring_overrun;
+/* Для диагностики: что лежало в первом секторе, который не оказался
+   видео, и сколько таких было до первого кадра. */
+static uint32_t first_bad_magic;
+static int      bad_sectors;
+static int      timed_out;
 
 static int frame_no;
 static int last_frame_id;      /* для распознавания начала следующего файла */
@@ -160,9 +169,8 @@ static void init_stream(void)
     CdReadyCallback(&cd_event_handler);
     ExitCriticalSection();
 
-    /* Version-3 STR is supported by the current encoder. The scratchpad table
-       is the fast Psy-Q/PSn00b-style VLC path and avoids rebuilding a 34 KiB
-       table for every frame. */
+    /* Таблица для битстримов версий 1–3 (кодировщик пишет v2) в
+       scratchpad: быстрый путь VLC без пересборки таблицы на каждый кадр. */
     DecDCTvlcCopyTableV3((VLC_TableV3 *) 0x1f800000);
 }
 
@@ -191,6 +199,9 @@ static void start_stream(CdlFILE *file)
 
     frame_no = -1;
     last_frame_id = -1;
+    first_bad_magic = 0;
+    bad_sectors = 0;
+    timed_out = 0;
     dropped_frames = 0;
     parse_pos = 0;
     asm_active = 0;
@@ -288,6 +299,9 @@ static int stream_next_frame(void)
         is_mdec = (h.magic == 0x0160 && h.type == 0x8001);
 
         if (!is_mdec) {
+            bad_sectors++;
+            if (!first_bad_magic)
+                first_bad_magic = ((uint32_t)h.magic << 16) | h.type;
             /* After the last frame, the next file/sector will normally not
                have STR magic. That is our end-of-stream marker. If we are
                midway through a frame, treat it as a broken stream instead. */
@@ -341,14 +355,18 @@ static int stream_next_frame(void)
 static int wait_frame(int skippable)
 {
     int spin = 0;
+    int start = VSync(-1);
 
     for (;;) {
         int r = stream_next_frame();
         if (r != 0)
             return r;
 
-        if (++spin > STR_SPIN_LIMIT)
+        ++spin;
+        if (VSync(-1) - start > STR_WAIT_VBLANKS) {
+            timed_out = 1;
             return -1;
+        }
 
         if (skippable && ((spin & (STR_PAD_EVERY - 1)) == 0) &&
             (pad_pressed() & (PAD_CROSS | PAD_START)))
@@ -491,11 +509,17 @@ int str_play(const char *path, int nframes, int ticks, int skippable)
     DecDCTReset(0);
     DecDCTvlcCopyTableV3(0);
 
+    /* Две строки, чтобы влезло в экран: по фотографии отчёта сразу видно,
+       дошли ли секторы от привода (cb), были ли среди них видеосекторы
+       (f) и что за данные пришли вместо них (bad/magic). */
     sprintf(str_report,
-            "f%d drop%d decerr%d over%d cb%d cd%d other%d %s",
+            "f%d drop%d dec%d over%d %s\n"
+            "cb%d bad%d m%08lx cd%d oth%d",
             shown, dropped_frames, decode_errors, ring_overrun,
-            cd_callbacks, cd_error, cd_other,
-            skipped ? "skip" : (cd_error ? "CDERR" : "end"));
+            skipped ? "skip" : timed_out ? "TIMEOUT"
+                    : (cd_error ? "CDERR" : "end"),
+            cd_callbacks, bad_sectors, (unsigned long)first_bad_magic,
+            cd_error, cd_other);
     LOG("str: %s\n", str_report);
 
     gfx_restore_display();

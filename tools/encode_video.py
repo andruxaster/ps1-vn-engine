@@ -185,12 +185,9 @@ def main():
     print(f"\nготово: {rel}")
     print(f"  {size} байт, ~{sectors} секторов, ~{secs:.1f}s при 2x")
     print(f"  зарегистрировано в videos.txt как '{args.name}'")
-    print(f"\nДальше:")
+    print("\nДальше:")
     print(f"  1. в script/main.vns:  str {args.name}")
-    print(f"  2. в iso.xml добавьте:  "
-          f'<file name="V000.STR" type="str" '
-          f'source="${{PROJECT_SOURCE_DIR}}/{rel}" />')
-    print(f"  3. python3 tools/build_data.py  (пересчитает кадры)")
+    print("  2. python3 tools/build_data.py  (сама допишет iso.xml и посчитает кадры)")
 
 
 if __name__ == "__main__":

@@ -111,7 +111,7 @@ static u_int  playtime;        /* кадров развёртки с начал�
 /* Отладочные сохранение и загрузка: L1 пишет, R1 читает. Настоящий экран
    сохранений появится позже — сейчас нужно убедиться, что карта отвечает
    на живой консоли, а прыжок к главе работает. */
-static char   save_msg[40];
+static char   save_msg[96];
 static int    save_msg_left;
 
 static void save_note(const char *m)
@@ -820,6 +820,12 @@ static void vm_step(void)
                параллельно всё равно ничего не происходит. */
             sprintf(path, "\\DATA\\STR\\V%03d.STR;1", id);
             str_play(path, nframes, ticks, skip);
+#if !VN_RELEASE
+            /* Отчёт ролика — сразу на экран, на десять секунд: если видео
+               не пошло на железе, его можно просто сфотографировать. */
+            save_note(str_last_report());
+            save_msg_left = 600;
+#endif
 
             /* Видео затёрло кадровые буферы, а текстуры фона и персонажей
                лежат выше по VRAM и уцелели — сцена восстановится сама
@@ -1105,6 +1111,25 @@ static void dbg_draw(void)
 }
 #endif
 
+/* Короткое сообщение (сохранение, загрузка, галерея, отчёт ролика).
+   Раньше оно рисовалось только внутри отладочного оверлея: без Select
+   игрок не видел ни «saved», ни «slot is empty», а в релизе — вообще
+   ничего. Теперь показывается всегда; при включённом оверлее — в нём. */
+static void note_draw(void)
+{
+    int h;
+
+    if (save_msg_left <= 0) return;
+#if !VN_RELEASE
+    if (dbg_on) return;
+#endif
+    h = font_lines(save_msg) * 20 + 8;
+    font_draw(save_msg, -1, 8, 8, Z_DEBUG, 255, 255, 140);
+    /* Подложка добавляется после текста: в слое OT она окажется ниже. */
+    box_draw(0, 4, SCR_W, h, 0, 0, 0, 0, Z_DEBUG);
+    box_draw(0, 4, SCR_W, h, 0, 0, 0, 0, Z_DEBUG);
+}
+
 void vm_render(void)
 {
     int i;
@@ -1141,7 +1166,10 @@ void vm_render(void)
 
     /* Титульное меню поверх фона-титульника (его ставит опкод bg до menu). */
     if (state == S_MENU) {
-        int y = 150;
+        /* Нижний пункт всегда на одной высоте: при трёх пунктах список
+           начинается со 150, четвёртый поднимает его, а не уводит за
+           нижний край экрана. */
+        int y = 228 - menu_count * 26;
         if (menu_title) {
             int tw = font_strwidth(menu_title);
             font_draw(menu_title, -1, (SCR_W - tw) / 2, 60, Z_TEXT, 255, 220, 140);
@@ -1162,6 +1190,7 @@ void vm_render(void)
         fade_draw(fade_level);
         if (gal_on) gal_draw();
         if (menu_on) menu_draw();      /* загрузка с титульного экрана */
+        note_draw();                   /* «gallery is empty» и т.п. */
 #if !VN_RELEASE
         if (dbg_on) dbg_draw();
 #endif
@@ -1219,6 +1248,7 @@ void vm_render(void)
 
     fade_draw(fade_level);
     if (menu_on) menu_draw();
+    note_draw();
 #if !VN_RELEASE
     if (dbg_on) dbg_draw();
 #endif

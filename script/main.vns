@@ -23,9 +23,19 @@ menu ""
   "Начать"    -> start
   "Загрузить" -> load
   "Галерея"   -> gallery
+  "Видео"     -> movie
 endmenu
 fade out 0.5s
 
+
+# Тестовый ролик STR (tools/make_test_video.py): номер кадра, бегущая
+# полоса и сигнал каждую секунду. В отладочной сборке после ролика на
+# экране десять секунд держится его отчёт — см. docs/platforms.md.
+@movie
+bgm stop
+fade out 0.5s
+str test
+goto title
 
 @start
 chapter "Лекция"

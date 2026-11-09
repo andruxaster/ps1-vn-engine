@@ -11,7 +11,9 @@ import sys, struct
 data = open(sys.argv[1], "rb").read()
 
 # Определяем раскладку по кратности размера
-if len(data) % 2352 == 0:
+# 2352 и 2336 совпадают по кратности каждые 147 секторов — сырой сектор
+# узнаём по синхропоследовательности.
+if len(data) % 2352 == 0 and data[:12] == b"\x00" + b"\xff" * 10 + b"\x00":
     SECTOR, SUB, DATA, kind = 2352, 0x12, 0x18, "strcd (сырой CD-сектор)"
 elif len(data) % 2336 == 0:
     SECTOR, SUB, DATA, kind = 2336, 0x02, 0x08, "str (для mkpsxiso)"

@@ -35,6 +35,9 @@
 					<file name="NAMES.DBG" type="data" source="${PROJECT_SOURCE_DIR}/data/SYS/NAMES.DBG" />
 					<file name="SAVEHDR.BIN" type="data" source="${PROJECT_SOURCE_DIR}/data/SYS/SAVEHDR.BIN" />
 				</dir>
+				<dir name="STR">
+					<file name="V000.STR" type="str" source="${PROJECT_SOURCE_DIR}/video/test.str" />
+				</dir>
 				<!-- AUTO-DATA-END -->
 			</dir>
 			<dummy sectors="1024" />
