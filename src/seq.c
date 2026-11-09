@@ -56,6 +56,11 @@ static int fade_target = 90;
 static int fade_frames;
 static int fade_stop;
 static int loop_enabled = 1;
+/* Рабочая громкость, заданная сценарием (bgm volume). К ней возвращаются
+   новый трек и плавное появление. master_vol — текущая, она гуляет при
+   затуханиях и после bgm fadeout остаётся нулём; если новый трек брал бы
+   её, то после первой же концовки музыка больше не звучала бы. */
+static int base_vol = SEQ_VOL_NORMAL;
 
 static u_int vab_body_off;
 static u_int vab_body_len;
@@ -371,7 +376,9 @@ void seq_play_se(int vag, int vol)
 
     if (vol < 0) vol = 100;
     if (vol > 127) vol = 127;
-    l = r = vol * master_vol / 127 * 0x3000 / 127;
+    /* От рабочей громкости, а не от текущей: во время затухания музыки
+       (и после него, когда она равна нулю) эффекты иначе пропадали бы. */
+    l = r = vol * base_vol / 127 * 0x3000 / 127;
     if (l > 0x3fff) l = r = 0x3fff;
 
     SpuSetKey(0, 1u << v);                  /* глушим прошлый на этом голосе */
@@ -652,6 +659,7 @@ int seq_play(const char *path, int loop)
     loop_tempo = tempo;
     loop_enabled = loop ? 1 : 0;
     running_status = 0;
+    master_vol = fade_target = base_vol;
     seq_reset_channels();
     set_tempo(tempo);
     fade_frames = 0;
@@ -690,12 +698,18 @@ void seq_set_volume(int v)
     if (v < 0) v = 0;
     if (v > 127) v = 127;
     master_vol = v;
+    base_vol = v;
     fade_target = v;
     fade_frames = 0;
     voice_update_volumes();
     fade_stop = 0;
 }
 
+int seq_base_volume(void) { return base_vol; }
+
+/* Плавно к громкости v. Трек НЕ останавливается даже на нуле: так
+   fade out ... music и fade in ... music возвращают ту же музыку с того
+   же места, как и обещает сценарий. */
 void seq_fade_to(int v, int frames)
 {
     if (v < 0) v = 0;
@@ -703,5 +717,20 @@ void seq_fade_to(int v, int frames)
     if (frames < 1) frames = 1;
     fade_target = v;
     fade_frames = frames;
-    fade_stop = (v == 0);
+    fade_stop = 0;
+}
+
+/* bgm fadeout: увести в тишину и остановить трек. */
+void seq_fade_out(int frames)
+{
+    seq_fade_to(0, frames);
+    fade_stop = 1;
+}
+
+/* bgm fadein: из тишины к рабочей громкости. */
+void seq_fade_in(int frames)
+{
+    master_vol = 0;
+    voice_update_volumes();
+    seq_fade_to(base_vol, frames);
 }

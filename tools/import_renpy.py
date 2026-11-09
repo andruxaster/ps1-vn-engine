@@ -36,7 +36,6 @@ import argparse
 import ast
 import os
 import re
-import sys
 
 from PIL import Image
 

@@ -131,9 +131,6 @@ int       cd_last_error(void);
 /* ---- card.c: карта памяти ---- */
 void      card_init(void);
 int       card_load_header(const char *path);
-int       card_present(int chan);
-int       card_write(int chan, const char *name, const void *data, int len);
-int       card_read(int chan, void *data, int len);
 /* Слоты внутри одного файла: сохранение в один не трогает остальные. */
 int       card_save_slot(int chan, const char *name, int slot,
                          const void *rec, int len);
@@ -145,8 +142,8 @@ int       card_save_extra(int chan, const char *name, const void *data, int len)
 int       card_load_extra(int chan, const char *name, void *data, int len);
 
 /* Причина последнего отказа карты */
-enum { CARD_ERR_NONE = 0, CARD_ERR_NOHDR, CARD_ERR_NOCARD, CARD_ERR_STATUS,
-       CARD_ERR_WRITE, CARD_ERR_DIR, CARD_ERR_TOOBIG, CARD_ERR_VERIFY };
+enum { CARD_ERR_NONE = 0, CARD_ERR_NOHDR, CARD_ERR_NOSPACE, CARD_ERR_READ,
+       CARD_ERR_WRITE, CARD_ERR_TOOBIG, CARD_ERR_VERIFY };
 int       card_last_error(void);
 
 /* ---- gallery.c: галерея открытых сцен ---- */
@@ -239,7 +236,10 @@ void      seq_stop(void);
 void      seq_tick(void);          /* раз в кадр из главного цикла */
 int       seq_playing(void);
 void      seq_set_volume(int v);   /* 0..127 */
-void      seq_fade_to(int v, int frames);
+void      seq_fade_to(int v, int frames);   /* трек не останавливает */
+void      seq_fade_out(int frames);          /* в тишину и стоп */
+void      seq_fade_in(int frames);           /* из тишины к рабочей */
+int       seq_base_volume(void);             /* заданная bgm volume */
 /* Короткий звук из банка: играет на голосах, свободных от музыки. */
 void      seq_play_se(int vag, int vol);
 /* Рабочая громкость музыки: к ней возвращается fade in ... music.

@@ -143,6 +143,16 @@ int gal_unlock(int i)
 
     gal_bits[i >> 3] |= (u_char)(1 << (i & 7));
 
+    /* Признаки могли не прочитаться при первом обращении (карту вставили
+       позже). Перед записью сливаем с тем, что лежит на карте сейчас, —
+       иначе открытое в прошлых прохождениях затёрлось бы. */
+    {
+        u_char on_card[GAL_BITS];
+        int k;
+        if (card_load_extra(0, card_file_name(), on_card, sizeof(on_card)) == 0)
+            for (k = 0; k < GAL_BITS; k++) gal_bits[k] |= on_card[k];
+    }
+
     if (card_save_extra(0, card_file_name(), gal_bits, sizeof(gal_bits)) < 0) {
         /* Карты нет или не пишется. Бит держим в памяти: в этом сеансе
            галерея работает, просто не переживёт выключение. */

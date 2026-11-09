@@ -1091,6 +1091,8 @@ class Compiler:
                     if not mm:
                         raise SystemExit(f"плохая строка выбора: {o}")
                     opts.append((mm.group(1), mm.group(2)))
+                if not 1 <= len(opts) <= 4:
+                    raise SystemExit("choice: нужно от 1 до 4 вариантов")
                 self.code += bytes([OPS["CHOICE"], len(opts)])
                 for txt, lbl in opts:
                     self.code += struct.pack("<I", self.s(txt))
@@ -1315,7 +1317,6 @@ class Compiler:
             self.chapter_table.append((c["hash"], ch, c["title"]))
 
         rev_pool = {off: txt for txt, off in self.pool.items()}
-        label_at = {pos: name for pos, name in self.fixups}
 
         blobs = []
         for c in range(nchunks):

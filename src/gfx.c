@@ -88,8 +88,11 @@ void *gfx_alloc(int size)
 {
     char *p = nextpri;
     size = (size + 3) & ~3;
+    /* Переполнение: примитив просто не рисуется. Раньше здесь отдавалось
+       начало буфера, то есть поверх уже связанных в OT примитивов, — это
+       рвало список, и GPU уходил по мусорному указателю. */
     if ((p + size) > (db[db_act].pri + PACKET_LEN))
-        return db[db_act].pri;      /* переполнение: пишем в начало, чтобы не упасть */
+        return NULL;
     nextpri += size;
     return p;
 }
@@ -250,7 +253,9 @@ void img_draw_ex(const VN_IMG *img, int x, int y, int z,
 
             if (ww > img->w - sx) ww = img->w - sx;
 
-            s = (SPRT *)gfx_alloc(sizeof(SPRT));
+            s  = (SPRT *)gfx_alloc(sizeof(SPRT));
+            tp = (DR_TPAGE *)gfx_alloc(sizeof(DR_TPAGE));
+            if (!s || !tp) return;
             setSprt(s);
             setXY0(s, x + sx, y + sy);
             setWH (s, ww, hh);
@@ -267,7 +272,6 @@ void img_draw_ex(const VN_IMG *img, int x, int y, int z,
 
             /* tpage добавляем ПОСЛЕ спрайта: addPrim кладёт в начало списка,
                значит GPU обработает его раньше самого спрайта */
-            tp = (DR_TPAGE *)gfx_alloc(sizeof(DR_TPAGE));
             setDrawTPage(tp, 0, 1,
                          getTPage(img->mode, abr >= 0 ? abr : 0, px, py));
             addPrim(gfx_ot() + z, tp);
@@ -281,6 +285,7 @@ void img_draw_ex(const VN_IMG *img, int x, int y, int z,
 void box_draw(int x, int y, int w, int h, int r, int g, int b, int abr, int z)
 {
     TILE *t = (TILE *)gfx_alloc(sizeof(TILE));
+    if (!t) return;
     setTile(t);
     setXY0(t, x, y);
     setWH (t, w, h);
@@ -291,6 +296,7 @@ void box_draw(int x, int y, int w, int h, int r, int g, int b, int abr, int z)
         setSemiTrans(t, 1);
         addPrim(gfx_ot() + z, t);
         tp = (DR_TPAGE *)gfx_alloc(sizeof(DR_TPAGE));
+        if (!tp) return;
         setDrawTPage(tp, 0, 1, getTPage(0, abr, 0, 0));
         addPrim(gfx_ot() + z, tp);
     } else {
@@ -396,6 +402,8 @@ void font_draw_glyph(int gi, int x, int y, int z, int r, int g, int b)
     if (gi < 0 || gi >= FONT_GLYPHS || !font_img.loaded) return;
 
     sp = (SPRT *)gfx_alloc(sizeof(SPRT));
+    tp = (DR_TPAGE *)gfx_alloc(sizeof(DR_TPAGE));
+    if (!sp || !tp) return;
     setSprt(sp);
     setXY0(sp, x, y);
     setWH (sp, GLYPH_W, GLYPH_H);
@@ -405,7 +413,6 @@ void font_draw_glyph(int gi, int x, int y, int z, int r, int g, int b)
     setRGB0(sp, r, g, b);
     addPrim(gfx_ot() + z, sp);
 
-    tp = (DR_TPAGE *)gfx_alloc(sizeof(DR_TPAGE));
     setDrawTPage(tp, 0, 1,
                  getTPage(font_img.mode, 0, font_img.tpx, font_img.tpy));
     addPrim(gfx_ot() + z, tp);
@@ -426,6 +433,7 @@ void font_draw(const char *s, int maxchars, int x, int y, int z,
         gi = cp2glyph(cp);
         if (cp != ' ') {
             SPRT *sp = (SPRT *)gfx_alloc(sizeof(SPRT));
+            if (!sp) break;
             setSprt(sp);
             setXY0(sp, cx, cy);
             setWH (sp, GLYPH_W, GLYPH_H);
@@ -441,6 +449,7 @@ void font_draw(const char *s, int maxchars, int x, int y, int z,
     /* Весь атлас влезает в одну texture page — хватает одного DR_TPAGE */
     if (drawn) {
         DR_TPAGE *tp = (DR_TPAGE *)gfx_alloc(sizeof(DR_TPAGE));
+        if (!tp) return;
         setDrawTPage(tp, 0, 1,
                      getTPage(font_img.mode, 0, font_img.tpx, font_img.tpy));
         addPrim(gfx_ot() + z, tp);

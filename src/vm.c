@@ -73,6 +73,27 @@ static u_char tint_r, tint_g, tint_b;
 static int slide_left, slide_total, slide_dir;
 static int bg_off_x, bg_off_y;        /* смещение фона при сдвиге */
 
+/* Прерванный сдвиг (ожидание пропущено кнопкой) не должен утащить за
+   собой следующий фон. */
+static void slide_cancel(void)
+{
+    slide_left = 0;
+    bg_off_x = bg_off_y = 0;
+}
+
+/* Сбрасывает все экранные эффекты: нужен при загрузке сохранения, иначе
+   тонирование, тряска или скрытое окно текста перетекали бы из той
+   сцены, где игрок нажал «загрузить». */
+static void fx_reset(void)
+{
+    shake_left = 0;
+    gfx_shake(0, 0);
+    flash_left = 0;
+    tint_on = 0;
+    slide_cancel();
+    box_visible = 1;
+}
+
 /* Простой генератор для тряски: настоящая случайность тут не нужна,
    важнее чтобы дрожание не выглядело периодичным. */
 static u_int shake_seed = 12345;
@@ -122,6 +143,9 @@ static void menu_refresh(void)
         menu_used[i] = (card_load_slot(0, SAVE_FILE, i,
                                        &menu_slots[i],
                                        sizeof(SaveSlot)) == 0);
+        /* Данные с карты недоверенные: повреждённая запись без нуля в
+           конце названия увела бы sprintf далеко за буфер строки. */
+        menu_slots[i].title[SAVE_TITLE - 1] = 0;
     }
 }
 
@@ -149,9 +173,10 @@ static void menu_confirm(void)
             return;
         }
         if (card_save_slot(0, SAVE_FILE, menu_pick, &slot, sizeof(slot)) < 0) {
+            /* Порядок обязан совпадать с CARD_ERR_* в vn.h */
             static const char *why[] = {
-                "?", "no icon file", "no card in slot 1", "card status bad",
-                "frame write refused", "directory write failed",
+                "?", "no icon file", "no card or card full",
+                "card read failed", "card write failed",
                 "record too big", "write did not land"
             };
             int e = card_last_error();
@@ -266,7 +291,8 @@ static void gal_update(u_int pressed)
 
 static void gal_draw(void)
 {
-    char line[48];
+    /* Название до 39 байт плюс «256/256  » — в 48 не помещалось. */
+    char line[64];
 
     /* Подпись снизу, чтобы не закрывать саму сцену. */
     box_draw(0, SCR_H - 24, SCR_W, 24, 8, 10, 34, 0, Z_BOX);
@@ -290,7 +316,7 @@ static void menu_update(u_int pressed)
 
 static void menu_draw(void)
 {
-    char line[48];
+    char line[64];
     int i, y = 60, n = card_slot_count();
     if (n > 4) n = 4;
 
@@ -362,7 +388,13 @@ static u_int rd32(u_int o) {
     return code[o] | (code[o+1] << 8) | (code[o+2] << 16) | ((u_int)code[o+3] << 24);
 }
 
-static const char *str_at(u_int off) { return strs + off; }
+static u_int str_len;           /* размер пула строк текущей главы */
+
+/* Смещение за пределами пула даёт пустую строку, а не чтение чужой памяти. */
+static const char *str_at(u_int off)
+{
+    return off < str_len ? strs + off : "";
+}
 
 static void asset_load(VN_IMG *dst, int id, int slot)
 {
@@ -446,14 +478,23 @@ static int load_chunk(int n)
     code_off    = hdr32(sbuf + 4);
     code_len    = hdr32(sbuf + 8);
     str_off     = hdr32(sbuf + 12);
+    str_len     = hdr32(sbuf + 16);
     chunk_count = sbuf[22] | (sbuf[23] << 8);
+
+    /* Заголовок проверяем по фактической длине файла: битый или чужой
+       файл иначе отправил бы интерпретатор читать память за буфером. */
+    if (code_off > (u_int)len || code_len > (u_int)len - code_off ||
+        str_off > (u_int)len || str_len > (u_int)len - str_off) {
+        LOG("vm: chapter %d header is broken\n", n);
+        return -1;
+    }
 
     code = sbuf + code_off;
     strs = (const char *)(sbuf + str_off);
 
     /* Пул строк расшифровываем на месте, один раз на главу (~7 мс на
        60 КБ — теряется на фоне 200 мс чтения с диска). */
-    descramble(sbuf + str_off, (int)hdr32(sbuf + 16), SCRAMBLE_SEED ^ (u_int)n);
+    descramble(sbuf + str_off, (int)str_len, SCRAMBLE_SEED ^ (u_int)n);
 
     cur_chunk = n;
 
@@ -536,6 +577,7 @@ static void vm_step(void)
             return;
 
         case OP_BG:
+            slide_cancel();            /* новый фон встаёт на место */
             dbg_bg_id = (int)rd16(pc + 1);
             dbg_scene_id = -1;
             asset_load(&bg_img, (int)rd16(pc + 1), SLOT_BG);
@@ -552,6 +594,7 @@ static void vm_step(void)
                Все кадры грузятся заранее в свои слоты VRAM и потом
                крутятся без обращения к диску. */
             int n = rd8(pc + 1), i;
+            slide_cancel();
             scene_delay = rd8(pc + 2);
             if (n > SCENE_FRAMES) n = SCENE_FRAMES;
             for (i = 0; i < n; i++)
@@ -628,7 +671,7 @@ static void vm_step(void)
             if (dir & 2) {
                 int frames = 255 / fade_step;
                 if (frames < 1) frames = 1;
-                seq_fade_to((dir & 1) ? 0 : SEQ_VOL_NORMAL, frames);
+                seq_fade_to((dir & 1) ? 0 : seq_base_volume(), frames);
             }
 
             pc += 3;
@@ -650,10 +693,10 @@ static void vm_step(void)
                 seq_stop();
                 pc += 2;
             } else if (sub == 2) {
-                seq_fade_to(0, (int)rd16(pc + 2));
+                seq_fade_out((int)rd16(pc + 2));
                 pc += 4;
             } else if (sub == 3) {
-                seq_fade_to(127, (int)rd16(pc + 2));
+                seq_fade_in((int)rd16(pc + 2));
                 pc += 4;
             } else if (sub == 4) {
                 seq_set_volume((int)rd8(pc + 2));
@@ -700,6 +743,13 @@ static void vm_step(void)
             } else {                           /* сдвиг фона через чёрное */
                 slide_dir   = rd8(pc + 2);
                 slide_total = slide_left = rd8(pc + 3);
+                /* Сдвиг ждёт своего конца, как fade out, который он
+                   заменяет. Раньше сценарий шёл дальше сразу, и следующий
+                   за ним bg успевал загрузиться и уехать вместо старого. */
+                wait_left = slide_total;
+                pc += 6;
+                state = S_WAIT;
+                return;
             }
             pc += 6;
             break;
@@ -720,17 +770,23 @@ static void vm_step(void)
             break;
 
         case OP_CHOICE: {
-            int n = rd8(pc + 1), i;
+            int n = rd8(pc + 1), i, k = 0;
             u_int p = pc + 2;
-            if (n > MAX_CHOICES) n = MAX_CHOICES;
+            /* Лишние варианты пропускаем, но pc сдвигаем на ВСЕ: иначе он
+               попал бы в середину таблицы и дальше исполнялся мусор. */
             for (i = 0; i < n; i++) {
-                ch_str[i]    = str_at(rd32(p));
-                ch_target[i] = rd32(p + 4);
+                if (k < MAX_CHOICES) {
+                    ch_str[k]    = str_at(rd32(p));
+                    ch_target[k] = rd32(p + 4);
+                    k++;
+                }
                 p += 8;
             }
-            ch_count = n;
-            ch_sel   = 0;
+            ch_count = k;
             pc = p;
+            if (!k)                        /* пустой выбор: просто идём дальше */
+                break;
+            ch_sel   = 0;
             state = S_CHOICE;
             return;
         }
@@ -795,14 +851,20 @@ static void vm_step(void)
             menu_title = str_at(rd32(pc + 1));
             if (!*menu_title) menu_title = NULL;
             n = rd8(pc + 5);
-            if (n > MENU_MAX) n = MENU_MAX;
             p = pc + 6;
-            for (i = 0; i < n; i++) {
-                menu_item[i]   = str_at(rd32(p));
-                menu_target[i] = rd32(p + 4);
+            menu_count = 0;
+            for (i = 0; i < n; i++) {          /* лишние пропускаем, см. CHOICE */
+                if (menu_count < MENU_MAX) {
+                    menu_item[menu_count]   = str_at(rd32(p));
+                    menu_target[menu_count] = rd32(p + 4);
+                    menu_count++;
+                }
                 p += 8;
             }
-            menu_count = n;
+            if (!menu_count) {
+                pc = p;
+                break;
+            }
             menu_sel   = 0;
             pc = p;
             state = S_MENU;
@@ -840,8 +902,11 @@ static void fx_tick(void)
         default: bg_off_y = SCR_H * t / slide_total; break;
         }
         if (slide_left == 0) {
-            /* Доехали: фон целиком за краем, экран чёрный. Смещение
-               сбрасываем, чтобы следующий bg встал на место. */
+            /* Доехали: фон целиком за краем. Убираем его совсем и только
+               потом сбрасываем смещение — иначе старый фон на миг
+               возвращался на место до загрузки нового. */
+            bg_img.loaded = 0;
+            scene_frames = 0;
             bg_off_x = bg_off_y = 0;
         }
     }
@@ -1200,6 +1265,9 @@ int vm_load_save(const SaveSlot *s)
     cur_name = NULL;
     fade_level = 255;
     fade_target = 255;
+    fx_reset();
+    ch_count = 0;
+    gal_on = 0;
 
     cur_chapter = s->chapter;
     playtime = s->playtime;

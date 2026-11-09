@@ -29,7 +29,6 @@
 import argparse
 import os
 import struct
-import sys
 
 GEN_KEYRANGE = 43
 GEN_INSTRUMENT = 41

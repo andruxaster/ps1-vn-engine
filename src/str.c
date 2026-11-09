@@ -210,8 +210,10 @@ static int frame_start(const STR_Header *h)
         return 0;
     if (h->bs_length == 0 || h->bs_length > STR_BS_WORDS * 4)
         return 0;
+    /* Кадр не больше экрана: столбцы MDEC пишутся в slices[], рассчитанный
+       на высоту SCR_H, а широкий кадр залез бы в VRAM фона и спрайтов. */
     if (h->width == 0 || h->height == 0 ||
-        h->width > 640 || h->height > 512)
+        h->width > SCR_W || h->height > SCR_H)
         return 0;
 
     asm_active = 1;

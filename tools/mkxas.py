@@ -43,7 +43,6 @@ import argparse
 import os
 import struct
 import subprocess
-import sys
 
 SECTOR = 2336          # XA-сектор без синхронизации, как выдаёт psxavenc -t xa
 SUBHDR = 8             # подзаголовок: файл, канал, подрежим, кодирование (и копия)

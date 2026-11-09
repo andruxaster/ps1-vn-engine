@@ -85,7 +85,7 @@ int voice_open(const char *xas, const char *idx)
         LOG("voice: no %s\n", idx);
         return -1;
     }
-    if (len < 8 || memcmp(voice_idx, "VIDX", 4) != 0) {
+    if (len < VOICE_HDR || memcmp(voice_idx, "VIDX", 4) != 0) {
         LOG("voice: %s is not VIDX\n", idx);
         return -1;
     }
@@ -94,7 +94,7 @@ int voice_open(const char *xas, const char *idx)
     voice_lanes = (int)rd16(voice_idx + 6);
     voice_fps_q8 = (int)rd16(voice_idx + 8);
 
-    if (VOICE_HDR + voice_count * VOICE_ENTRY > (int)sizeof(voice_idx)) {
+    if (VOICE_HDR + voice_count * VOICE_ENTRY > len) {
         LOG("voice: index too big (%d lines)\n", voice_count);
         return -1;
     }
@@ -144,10 +144,7 @@ int voice_play(int index)
     frames = (rd16(e + 6) * (u_int)voice_fps_q8) >> 8;
     frames += 30;                 /* небольшой запас на раскрутку */
 
-    /* Режим здесь НЕ выставляем: между репликами он не меняется, а каждая
-       команда приводу блокирующая — ждёт ответа, и на это время встаёт
-       главный цикл вместе с тактом секвенсора. Режим ставится один раз,
-       перед запуском первой реплики. */
+    /* Режим ставится перед каждой репликой — см. voice_apply_mode(). */
     voice_apply_mode();
 
     filter.file = 0;
